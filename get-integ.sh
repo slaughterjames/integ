@@ -28,6 +28,7 @@ DIR="/opt/integ/"
 SCRIPT_REPO_DIR="/home/scalp/integ/script_repo/"
 DIFF_DIR="/home/scalp/integ/diff/"
 OUTPUT_DIR="/home/scalp/integ/output/"
+INTEG_HOME_DIR="/home/scalp/integ/"
 
 echoerror() {
     printf "${RC} * ERROR${EC}: $@\n" 1>&2;
@@ -154,6 +155,9 @@ configure_integ() {
   mkdir -p $DIR >> $LOGFILE 2>&1
   chmod a+w $DIR >> $LOGFILE 2>&1
 
+  mkdir -p $INTEG_HOME_DIR >> $LOGFILE 2>&1
+  chmod a+w $INTEG_HOME_DIR >> $LOGFILE 2>&1
+
   mkdir -p $SCRIPT_REPO_DIR >> $LOGFILE 2>&1
   chmod a+w $SCRIPT_REPO_DIR >> $LOGFILE 2>&1
 
@@ -163,9 +167,9 @@ configure_integ() {
   mkdir -p $OUTPUT_DIR >> $LOGFILE 2>&1
   chmod a+w $OUTPUT_DIR >> $LOGFILE 2>&1
 
-  echo "<Remove this line - Enter list of targets in the following format:>" > $DIR/targets.txt
-  echo "<Remove this line - someaddress.com;https://locationoffiletoverify.com/file.js;MD5Hash>" > $DIR/targets.txt
-  chmod a+w $DIR/keywords.txt $LOGFILE 2>&1
+  echo "<Remove this line - Enter list of targets in the following format:>" > $INTEG_HOME_DIR/targets.txt
+  echo "<Remove this line - someaddress.com;https://locationoffiletoverify.com/file.js;MD5Hash>" > $INTEG_HOME_DIR/targets.txt
+  chmod a+w $INTEG_HOME_DIR/targets.txt $LOGFILE 2>&1
 
   return 0
 }
