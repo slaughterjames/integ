@@ -1,20 +1,20 @@
 #!/usr/bin/python
 '''
-integ v0.1 - Copyright 2018 James Slaughter,
-This file is part of integ v0.1.
+integ v0.2 - Copyright 2018 James Slaughter,
+This file is part of integ v0.2.
 
-integ v0.1 is free software: you can redistribute it and/or modify
+integ v0.2 is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
-integ v0.1 is distributed in the hope that it will be useful,
+integ v0.2 is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with integ v0.1.  If not, see <http://www.gnu.org/licenses/>.
+along with integ v0.2.  If not, see <http://www.gnu.org/licenses/>.
 '''
 
 #python import
@@ -23,9 +23,11 @@ import os
 import subprocess
 import datetime
 import time
+import smtplib
 import hashlib
 import urllib2
 from datetime import date
+from email.mime.text import MIMEText
 from array import *
 from termcolor import colored
 
@@ -77,6 +79,17 @@ def ConfRead():
             CON.output = line[7:intLen].strip()
         elif (line.find('logfile') != -1):
             CON.logfile = line[8:intLen].strip()
+        elif (line.find('emailalerting') != -1):
+            if (line[14:intLen].strip() == 'True'):
+                CON.emailalerting = True        
+        elif (line.find('recipients') != -1):                
+            CON.recipients = line[11:intLen].strip()
+        elif (line.find('subject') != -1):
+            CON.email_subject = line[8:intLen].strip()
+        elif (line.find('email') != -1):
+            CON.email = line[6:intLen].strip()
+        elif (line.find('password') != -1):
+            CON.password = line[9:intLen].strip()
         else:
             if (CON.debug == True): 
                 print ''
@@ -93,6 +106,34 @@ def ConfRead():
         print ''
         return -1
 
+    if (CON.emailalerting == True):
+        print '[*] E-mail alerting is active...'
+        FLOG.WriteLogFile(CON.logfile, '[*] E-mail alerting is active...\n') 
+
+        if (len(CON.email) < 3):
+            print '[x] Please enter a valid sender e-mail address in the integ.conf file.  Terminating...'
+            FLOG.WriteLogFile(CON.logfile, '[x] Please enter a valid sender e-mail address in the integ.conf file.  Terminating...\n')            
+            print ''
+            return -1    
+
+        if (len(CON.password) < 3):
+            print '[x] Please enter a valid sender e-mail password in the integ.conf file.  Terminating...'
+            FLOG.WriteLogFile(CON.logfile, '[x] Please enter a valid sender e-mail password in the integ.conf file.  Terminating...\n')            
+            print ''
+            return -1
+
+        if (len(CON.recipients) < 3):
+            print '[x] Please enter a valid recipients file in the integ.conf file.  Terminating...' 
+            FLOG.WriteLogFile(CON.logfile, '[x] Please enter a valid recipients file in the integ.conf file.  Terminating...\n')           
+            print ''
+            return -1
+
+        if (len(CON.email_subject) < 3):
+            print '[-] No custom e-mail subject entered.  Using: "Integ Alert"'
+            FLOG.WriteLogFile(CON.logfile, '[-] No custom e-mail subject entered.  Using: \"Integ Alert\"\n')
+            CON.email_subject == 'Integ Alert'            
+            print ''
+
     try:
         # Read in our list of targets
         with open(CON.targets.strip(),"r") as fd:
@@ -103,6 +144,18 @@ def ConfRead():
         print '[x] Unable to read targets file: ' + CON.targets
         FLOG.WriteLogFile(CON.logfile, '[x] Unable to read targets file: ' + CON.targets)
         return -1
+
+    if (CON.emailalerting == True):
+        try:
+            # Read in our list of recipients
+            with open(CON.recipients.strip(),"r") as fd:
+                file_contents2 = fd.read()
+                CON.recipient_list    = file_contents2.splitlines()
+        except:
+            # Recipients list read failed, bail!
+            print '[x] Unable to read recipients file: ' + CON.recipients
+            FLOG.WriteLogFile(CON.logfile, '[x] Unable to read recipients file: ' + CON.recipients) 
+            return -1
          
     print '[*] Finished configuration successfully.\n'
     FLOG.WriteLogFile(CON.logfile, '[*] Finished configuration successfully.\n')
@@ -128,6 +181,58 @@ def Parse(args):
                 print option + ': ' + str(CON.debug)
 
 '''
+send_alert()
+Function: - Sends the alert e-mail from the address specified
+            in the configuration file to potentially several addresses
+            specified in the "recipients.txt" file.
+'''
+def send_alert(alert_email):
+
+    FLOG = fileio()
+    
+    email_body = 'Integ has completed a run ' + str(datetime.datetime.now().strftime("%I:%M%p on %B %d, %Y")) + '\n'
+
+    if (CON.debug == True): 
+       print '\n[DEBUG] Walking through the output from alert_email ***'
+       FLOG.WriteLogFile(CON.logfile, '[DEBUG] Walking through the output from alert_email ***\n')
+
+    if (len(alert_email) == 0):
+        print '\n[DEBUG] No changes in the monitored scripts have been detected during this run...***'
+        FLOG.WriteLogFile(CON.logfile, '[DEBUG] No changes in the monitored scripts have been detected during this run...***\n')
+        email_body += '\r\rNo changes in the monitored scripts have been detected during this run...'
+    else:
+        # Walk through the output from alert_email    
+        for result in alert_email:
+            if (CON.debug == True):        
+                print '\n[DEBUG] Result: ' + result.strip()
+                FLOG.WriteLogFile(CON.logfile, '[DEBUG] Result: ' + result.strip() + '\n')
+  
+            email_body += '\r\rResult: ' + result.strip()
+
+    for recipient_entry in CON.recipient_list:
+        print '\r\n[-] Sending e-mail to: ' + recipient_entry                        
+        FLOG.WriteLogFile(CON.logfile, '[-] Sending e-mail to: ' + recipient_entry + '\n')
+
+        # Build the email message
+        msg = MIMEText(email_body)
+        msg['Subject'] = CON.email_subject.strip()
+        msg['From']    = CON.email.strip()
+        msg['To']      = recipient_entry
+    
+        server = smtplib.SMTP("smtp.gmail.com",587)
+    
+        server.ehlo()
+        server.starttls()
+        server.login(CON.email.strip(),CON.password.strip())
+        server.sendmail(recipient_entry,recipient_entry,msg.as_string())
+        server.quit()
+    
+        print '[*] Alert email sent!'
+        FLOG.WriteLogFile(CON.logfile, '[*] Alert email sent!\n')  
+    
+    return 0
+
+'''
 validate_hash()
 Function: - connects to a remote host to verify the target file's hash matches the one on record
 '''
@@ -145,6 +250,7 @@ def validate_hash():
     remote_hash_value = hashlib.md5() 
     change = False
     notes = ''
+    alert_email = []
     target_count = len(CON.target_list)
     csv_filename = CON.output + str(datetime.datetime.now().strftime("%d-%m-%Y_%I:%M")) + '.csv'
     wget_data = ''
@@ -200,6 +306,8 @@ def validate_hash():
         if (error == True):
             print colored('\n[-] Skipping to next target due to error...', 'yellow', attrs=['bold'])
             FCSV.WriteLogFile(csv_filename, owner_domain + ',' + url + ',' + str(orig_hash_value) + ',' + '---------------------------------------------------------' + ',' + str(change) + ',' + notes + '\n')
+            if (CON.emailalerting == True):
+                alert_email.append('An error was encountered for OWNER: ' + owner_domain + ' - URL: ' + url + ' - ORIG MD5: ' + str(orig_hash_value) + ' - NOTES: ' + notes + '\n')
         elif (str(remote_hash_value.hexdigest()) == orig_hash_value.strip()):
             print colored('[*] Original and remote MD5 hashes match!', 'green', attrs=['bold'])
             FLOG.WriteLogFile(CON.logfile, '[*] Original and remote MD5 hashes match!\n')
@@ -209,6 +317,8 @@ def validate_hash():
             print colored('[x] Original and remote MD5 hashes DO NOT match!', 'red', attrs=['bold'])
             FLOG.WriteLogFile(CON.logfile, '[*] Original and remote MD5 hashes DO NOT match!!\n')
             change = True
+            if (CON.emailalerting == True):
+                alert_email.append('Original and remote MD5 hashes DO NOT match for OWNER: ' + owner_domain + ' - URL: ' + url + ' - ORIG MD5: ' + str(orig_hash_value) + ' - REMOTE MD5: ' + str(remote_hash_value.hexdigest()) + '\n')
 
             print '[*] Downloading additional version...'
             FLOG.WriteLogFile(CON.logfile, '[*] Downloading additional version...\n')
@@ -244,6 +354,7 @@ def validate_hash():
             print '[DEBUG] notes: ' + notes
             print '[DEBUG] remote_file: ' + str(remote_file)
             print '[DEBUG] data: ' + str(data)
+            print '[DEBUG] alert_email: ' + alert_email  
         
         #Try to observe some proper variable hygiene and avoid data leakage between runs of the for loop
         owner_domain = '' 
@@ -257,6 +368,12 @@ def validate_hash():
 
         #Move the counter ahead to access the next element in the target list
         Count += 1
+
+    if (CON.emailalerting == True):
+        if (CON.debug == True):
+            print '\n[DEBUG] Passing data to send_alert() ***'
+
+        send_alert(alert_email)
 
     print colored('\n[*] Output file created at: ' + csv_filename, 'green', attrs=['bold'])
     FLOG.WriteLogFile(CON.logfile, '[*] Output file created at: ' + csv_filename + '\n')
