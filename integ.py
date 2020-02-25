@@ -359,10 +359,11 @@ def send_alert():
         msg.attach(part)
     
         server = smtplib.SMTP(CON.server,int(CON.serverport))
-    
-        server.ehlo()
-        server.starttls()
-        server.login(CON.email.strip(),CON.password.strip())
+        
+        if (CON.emailpassthrough == False):
+            server.ehlo()
+            server.starttls()
+            server.login(CON.email.strip(),CON.password.strip())
         server.sendmail(recipient_entry,recipient_entry,msg.as_string())
         server.quit()
     
